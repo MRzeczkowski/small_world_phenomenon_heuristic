@@ -40,7 +40,7 @@ func drawInitialSolutions(numberOfSolutions int, dimensions int) [][]float64 {
 	for i := range initialSolutions {
 		initialSolutions[i] = make([]float64, dimensions)
 		for j := range initialSolutions[i] {
-			initialSolutions[i][j] = rand.Float64()*(Max-Min) - Max
+			initialSolutions[i][j] = rand.Float64()*(Max-Min) + Min
 		}
 	}
 
@@ -49,13 +49,12 @@ func drawInitialSolutions(numberOfSolutions int, dimensions int) [][]float64 {
 
 func smallWorldPhenomenon1(
 	maxIterations int,
-	numberOfSolutions int,
+	numberOfCandidateSolutions int,
 	dimensions int,
-	localSearchProbability float64,
 	local mutateResult,
 	distant mutateResult) []float64 {
 
-	candidates := drawInitialSolutions(numberOfSolutions, dimensions)
+	candidates := drawInitialSolutions(numberOfCandidateSolutions, dimensions)
 
 	for k := 0; k < maxIterations; k++ {
 		for i := range candidates {
@@ -73,13 +72,13 @@ func smallWorldPhenomenon1(
 
 func smallWorldPhenomenon2(
 	maxIterations int,
-	numberOfSolutions int,
+	numberOfCandidateSolutions int,
 	dimensions int,
 	localSearchProbability float64,
 	local mutateResult,
 	distant mutateResult) []float64 {
 
-	candidates := drawInitialSolutions(numberOfSolutions, dimensions)
+	candidates := drawInitialSolutions(numberOfCandidateSolutions, dimensions)
 
 	for k := 0; k < maxIterations; k++ {
 		for i := range candidates {
@@ -110,31 +109,28 @@ type MutationPackage struct {
 	Distant mutateResult
 }
 
-var tooLow = 0
-var tooHigh = 0
-
 var Min = -5.12
 var Max = 5.12
 
 func clamp(value float64) float64 {
 	if value < Min {
-		tooLow++
 		return Min
 	} else if value > Max {
-		tooHigh++
 		return Max
 	}
+
 	return value
 }
 
 func reflect(value float64) float64 {
 	if value < Min {
-		tooLow++
+
 		return 2*Min - value
 	} else if value > Max {
-		tooHigh++
+
 		return 2*Max - value
 	}
+
 	return value
 }
 
@@ -158,7 +154,11 @@ func mutationBase(solution []float64, mutation mutateOne) []float64 {
 	mutatedSolution := make([]float64, n)
 
 	for i := range solution {
-		mutatedSolution[i] = clamp(mutation(solution[i]))
+		mutatedSolution[i] = mutation(solution[i])
+
+		//mutateWithinBounds(solution[i], mutation)
+		//clamp(mutation(solution[i]))
+		//reflect(mutation(solution[i]))
 	}
 
 	return mutatedSolution
@@ -172,61 +172,89 @@ func makeMutationPackage(name string, local mutateOne, distant mutateOne) Mutati
 }
 
 func main() {
-
 	dimensions := 3
 	maxIterations := 1000
-	numberOfSolutions := 10
-	numberOfTests := 10
-	localSearchProbability := 0.75
+	numberOfCandidateSolutions := 10
+	numberOfTests := 100
 
 	fmt.Println("Simulation Parameters:")
 	fmt.Println("- Number of dimensions:", dimensions)
-	fmt.Println("- Local search Probability:", localSearchProbability)
 	fmt.Println("- Max iterations per test:", maxIterations)
-	fmt.Println("- Number of solutions per iteration:", numberOfSolutions)
+	fmt.Println("- Number of candidate solutions:", numberOfCandidateSolutions)
 	fmt.Println("- Number of tests per algorithm:", numberOfTests)
-
 	fmt.Println()
 
-	fmt.Println("| Algorithm | Average Result | Average Time (ms) |")
-	fmt.Println("|-|-|-|")
+	localMultiplierStart := 1.0
+	localMultiplierEnd := 1.0
+	localMultiplierStep := 0.05
 
-	localMultiplier := 1.0
-	distantMultiplier := 1.0
+	distantMultiplierStart := 0.05
+	distantMultiplierEnd := 0.05
+	distantMultiplierStep := 0.01
 
-	//localMultiplier := 0.01
-	//distantMultiplier := 0.05
+	localSearchProbabilityStart := 0.5
+	localSearchProbabilityEnd := 0.5
+	localSearchProbabilityStep := 0.05
 
-	mutations := []MutationPackage{
-		makeMutationPackage(
-			fmt.Sprintf("Norm(X, %.1f) + Cauchy(X, %.1f)", localMultiplier, distantMultiplier),
-			func(f float64) float64 { return f + rand.NormFloat64()*localMultiplier },
-			func(f float64) float64 { return cauchyRandom(f, distantMultiplier) }),
-		makeMutationPackage(
-			fmt.Sprintf("Norm(X, %.1f) + Norm(X, %.1f)", localMultiplier, distantMultiplier),
-			func(f float64) float64 { return f + rand.NormFloat64()*localMultiplier },
-			func(f float64) float64 { return f + rand.NormFloat64()*distantMultiplier }),
-		makeMutationPackage(
-			fmt.Sprintf("Uniform(X, %.1f) + Cauchy(X, %.1f)", localMultiplier, distantMultiplier),
-			func(f float64) float64 { return f + rand.Float64()*localMultiplier },
-			func(f float64) float64 { return cauchyRandom(f, distantMultiplier) }),
-	}
+	fmt.Println("| Algorithm | Local Search Probability | Average Result | Average Time (ms) |")
+	fmt.Println("|-|-|-|-|")
 
-	for _, mutationPackage := range mutations {
-		sum1 := 0.0
-		sum2 := time.Duration(0)
+	bestResult := math.Inf(1)
+	bestLocalMultiplier := 0.0
+	bestDistantMultiplier := 0.0
+	bestLocalSearchProbability := 0.0
+	bestOperators := ""
 
-		for i := 0; i < numberOfTests; i++ {
-			start := time.Now()
-			solution1 := smallWorldPhenomenon2(maxIterations, numberOfSolutions, dimensions, localSearchProbability, mutationPackage.Local, mutationPackage.Distant)
-			result1 := rastrigin(solution1)
-			sum1 += result1
-			sum2 += time.Since(start)
+	for localSearchProbability := localSearchProbabilityStart; localSearchProbability <= localSearchProbabilityEnd; localSearchProbability += localSearchProbabilityStep {
+		for localMultiplier := localMultiplierStart; localMultiplier <= localMultiplierEnd; localMultiplier += localMultiplierStep {
+			for distantMultiplier := distantMultiplierStart; distantMultiplier <= distantMultiplierEnd; distantMultiplier += distantMultiplierStep {
+
+				mutations := []MutationPackage{
+					makeMutationPackage(
+						fmt.Sprintf("Norm(X, %.2f) + Cauchy(X, %.2f)", localMultiplier, distantMultiplier),
+						func(f float64) float64 { return f + rand.NormFloat64()*localMultiplier },
+						func(f float64) float64 { return cauchyRandom(f, distantMultiplier) }),
+					makeMutationPackage(
+						fmt.Sprintf("Norm(X, %.2f) + Norm(X, %.2f)", localMultiplier, distantMultiplier),
+						func(f float64) float64 { return f + rand.NormFloat64()*localMultiplier },
+						func(f float64) float64 { return f + rand.NormFloat64()*distantMultiplier }),
+					makeMutationPackage(
+						fmt.Sprintf("Uniform(X, %.2f) + Cauchy(X, %.2f)", localMultiplier, distantMultiplier),
+						func(f float64) float64 { return f + rand.Float64()*localMultiplier },
+						func(f float64) float64 { return cauchyRandom(f, distantMultiplier) }),
+				}
+
+				for _, mutationPackage := range mutations {
+					sumResults := 0.0
+					sumTime := time.Duration(0)
+
+					for i := 0; i < numberOfTests; i++ {
+						start := time.Now()
+						solution := smallWorldPhenomenon2(maxIterations, numberOfCandidateSolutions, dimensions, localSearchProbability, mutationPackage.Local, mutationPackage.Distant)
+						result := rastrigin(solution)
+						sumResults += result
+						sumTime += time.Since(start)
+					}
+
+					averageResult := sumResults / float64(numberOfTests)
+					fmt.Printf("| %s | %.2f | %.4f | %v |\n", mutationPackage.Name, localSearchProbability, averageResult, sumTime.Milliseconds()/int64(numberOfTests))
+
+					if averageResult < bestResult {
+						bestResult = averageResult
+						bestLocalMultiplier = localMultiplier
+						bestDistantMultiplier = distantMultiplier
+						bestLocalSearchProbability = localSearchProbability
+						bestOperators = mutationPackage.Name
+					}
+				}
+			}
 		}
-
-		fmt.Printf("| %s | %.4f | %v |\n", mutationPackage.Name, sum1/float64(numberOfTests), sum2.Milliseconds()/int64(numberOfTests))
 	}
 
-	fmt.Printf("Too low count =  %d\n", tooLow)
-	fmt.Printf("Too low high =  %d\n", tooHigh)
+	fmt.Println("\nBest Parameters Found:")
+	fmt.Printf("Best operators: %s\n", bestOperators)
+	fmt.Printf("Best local search probability: %.2f\n", bestLocalSearchProbability)
+	fmt.Printf("Best local multiplier: %.2f\n", bestLocalMultiplier)
+	fmt.Printf("Best distant multiplier: %.2f\n", bestDistantMultiplier)
+	fmt.Printf("Best average result: %.4f\n", bestResult)
 }
