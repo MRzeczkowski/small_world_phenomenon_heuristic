@@ -186,40 +186,43 @@ func main() {
 
 	localMultiplierStart := 1.0
 	localMultiplierEnd := 1.0
-	localMultiplierStep := 0.05
+	localMultiplierStep := 0.01
 
 	distantMultiplierStart := 0.05
 	distantMultiplierEnd := 0.05
-	distantMultiplierStep := 0.01
+	distantMultiplierStep := 0.05
 
 	localSearchProbabilityStart := 0.5
 	localSearchProbabilityEnd := 0.5
 	localSearchProbabilityStep := 0.05
 
-	fmt.Println("| Algorithm | Local Search Probability | Average Result | Average Time (ms) |")
-	fmt.Println("|-|-|-|-|")
+	fmt.Println("| Algorithm | Local multiplier | Distant multiplier | Local Search Probability | Average Result | Average Time (ms) |")
+	fmt.Println("|-|-|-|-|-|-|")
 
-	bestResult := math.Inf(1)
-	bestLocalMultiplier := 0.0
-	bestDistantMultiplier := 0.0
-	bestLocalSearchProbability := 0.0
-	bestOperators := ""
+	// Initialize best results for each mutation package
+	bestResults := make(map[string]float64)
+	bestLocalMultipliers := make(map[string]float64)
+	bestDistantMultipliers := make(map[string]float64)
+	bestLocalSearchProbabilities := make(map[string]float64)
+
+	for _, mutationName := range []string{"Normal+Cauchy", "Normal+Normal", "Uniform+Cauchy"} {
+		bestResults[mutationName] = math.Inf(1)
+	}
 
 	for localSearchProbability := localSearchProbabilityStart; localSearchProbability <= localSearchProbabilityEnd; localSearchProbability += localSearchProbabilityStep {
 		for localMultiplier := localMultiplierStart; localMultiplier <= localMultiplierEnd; localMultiplier += localMultiplierStep {
 			for distantMultiplier := distantMultiplierStart; distantMultiplier <= distantMultiplierEnd; distantMultiplier += distantMultiplierStep {
-
 				mutations := []MutationPackage{
 					makeMutationPackage(
-						fmt.Sprintf("Norm(X, %.2f) + Cauchy(X, %.2f)", localMultiplier, distantMultiplier),
+						"Normal+Cauchy",
 						func(f float64) float64 { return f + rand.NormFloat64()*localMultiplier },
 						func(f float64) float64 { return cauchyRandom(f, distantMultiplier) }),
 					makeMutationPackage(
-						fmt.Sprintf("Norm(X, %.2f) + Norm(X, %.2f)", localMultiplier, distantMultiplier),
+						"Normal+Normal",
 						func(f float64) float64 { return f + rand.NormFloat64()*localMultiplier },
 						func(f float64) float64 { return f + rand.NormFloat64()*distantMultiplier }),
 					makeMutationPackage(
-						fmt.Sprintf("Uniform(X, %.2f) + Cauchy(X, %.2f)", localMultiplier, distantMultiplier),
+						"Uniform+Cauchy",
 						func(f float64) float64 { return f + rand.Float64()*localMultiplier },
 						func(f float64) float64 { return cauchyRandom(f, distantMultiplier) }),
 				}
@@ -237,24 +240,25 @@ func main() {
 					}
 
 					averageResult := sumResults / float64(numberOfTests)
-					fmt.Printf("| %s | %.2f | %.4f | %v |\n", mutationPackage.Name, localSearchProbability, averageResult, sumTime.Milliseconds()/int64(numberOfTests))
+					fmt.Printf("| %s | %.2f | %.2f | %.2f | %.4f | %v |\n", mutationPackage.Name, localMultiplier, distantMultiplier, localSearchProbability, averageResult, sumTime.Milliseconds()/int64(numberOfTests))
 
-					if averageResult < bestResult {
-						bestResult = averageResult
-						bestLocalMultiplier = localMultiplier
-						bestDistantMultiplier = distantMultiplier
-						bestLocalSearchProbability = localSearchProbability
-						bestOperators = mutationPackage.Name
+					if averageResult < bestResults[mutationPackage.Name] {
+						bestResults[mutationPackage.Name] = averageResult
+						bestLocalMultipliers[mutationPackage.Name] = localMultiplier
+						bestDistantMultipliers[mutationPackage.Name] = distantMultiplier
+						bestLocalSearchProbabilities[mutationPackage.Name] = localSearchProbability
 					}
 				}
 			}
 		}
 	}
 
-	fmt.Println("\nBest Parameters Found:")
-	fmt.Printf("Best operators: %s\n", bestOperators)
-	fmt.Printf("Best local search probability: %.2f\n", bestLocalSearchProbability)
-	fmt.Printf("Best local multiplier: %.2f\n", bestLocalMultiplier)
-	fmt.Printf("Best distant multiplier: %.2f\n", bestDistantMultiplier)
-	fmt.Printf("Best average result: %.4f\n", bestResult)
+	fmt.Println("\nBest Parameters Found for Each Mutation Package:")
+	for name, result := range bestResults {
+		fmt.Printf("- %s:\n", name)
+		fmt.Printf("\t- Local Search Probability: %.2f\n", bestLocalSearchProbabilities[name])
+		fmt.Printf("\t- Local Multiplier: %.2f\n", bestLocalMultipliers[name])
+		fmt.Printf("\t- Distant Multiplier: %.2f\n", bestDistantMultipliers[name])
+		fmt.Printf("\t- Average Result: %.4f\n", result)
+	}
 }
