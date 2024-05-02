@@ -156,9 +156,9 @@ func mutationBase(solution []float64, mutation mutateOne) []float64 {
 	for i := range solution {
 		mutatedSolution[i] = mutation(solution[i])
 
-		//mutateWithinBounds(solution[i], mutation)
 		//clamp(mutation(solution[i]))
 		//reflect(mutation(solution[i]))
+		//mutateWithinBounds(solution[i], mutation)
 	}
 
 	return mutatedSolution
